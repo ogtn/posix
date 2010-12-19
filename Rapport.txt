@@ -1,0 +1,58 @@
+
+La description de la problématique (ie. l'explication, en utilisant vos propres termes, du travail qui vous est demandé.)
+
+L'analyse du problème (cette partie doit faire ressortir en français et sans la moindre ligne de code vos choix de conceptions, 
+les problèmes que vous vous attendez à rencontrer et la manière dont vous comptez les résoudre.)
+
+La description de la problématique (ie. l'explication, en utilisant vos propres termes, du travail qui vous est demandé.)
+L'analyse du problème (cette partie doit faire ressortir en français et sans la moindre ligne de code vos choix de conceptions, les problèmes que vous vous attendez à rencontrer et la manière dont vous comptez les résoudre.)
+L'architecture de votre solution (la description, avec les structures de données et les variables que vous allez utiliser, avec des diagrammes pour représenter les relations entre les variables et entre les processus, du fonctionnement de chaque opération dans votre bibliothèque ; prenez soin de bien détailler les variables, leur type et leur utilité.)
+Un mini-manuel utilisateur (pour chaque opération, la spécification du comportement à attendre lorsqu'on l'appelle.)
+
+
+TODO
+    Unlock qd quiot
+    Tableau de cond
+    Truc a zero au début
+
+Choix du client:
+    
+    Bloquant
+    
+        Avantages / Inconvénirents
+        
+        Alternatives
+
+    Test du coté client : force et robustesse
+    
+    
+Serveur
+    
+    Multithread
+    
+    Thread : Schema découipage ft
+    
+    Avantges inconvzniernts
+    
+    Altern atifs
+    
+        Pool:
+        Nes shcemea
+        
+
+
+Client : 
+	Accès "séquentiel"	D -> Attente de réponse -> réponse
+	Evite les problèmes de "Delay Slot" : 
+		-un client demande un lockage : ajout dans la file serveur
+		-Le client demande un unlockage alors que le lockage n'est pas 
+		encore pris en compte : Gestion supp ou pas
+
+Server :
+
+    Select VS Thread
+
+    il serait plus propre de faire une condition apr client, et de ne
+    reveiller que le client concerné
+
+Test que d'un coté bla robustesse bla réseau bla
