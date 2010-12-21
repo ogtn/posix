@@ -31,7 +31,7 @@
  */
 int clientInitSocket(unsigned int port, char const *servAddr)
 {
-	int socketd = -1, error = 1;
+	int sd = -1, error = 1;
     struct sockaddr_in addrIn;
     struct sockaddr * addr = (struct sockaddr *) &addrIn;
     struct hostent *hp = gethostbyname(servAddr);
@@ -47,12 +47,12 @@ int clientInitSocket(unsigned int port, char const *servAddr)
 			addrIn.sin_family = AF_INET;
 			/* Port de connection au serveur */
 			addrIn.sin_port = htons(port);
-				
+            
 			/* Création de la socket */
-			if((socketd = socket(AF_INET, SOCK_STREAM, 0)) >= 0) 
+			if((sd = socket(AF_INET, SOCK_STREAM, 0)) >= 0) 
 			{
 				/* Connection à la socket */	
-				if(connect(socketd, addr, sizeof(struct sockaddr_in)) == 0)
+				if(connect(sd, addr, sizeof(struct sockaddr_in)) == 0)
 				{
 					error = 0;
 				}
@@ -66,18 +66,18 @@ int clientInitSocket(unsigned int port, char const *servAddr)
 				perror("clientInitSocket : socket");
 			}
 			
-			if(error && socketd != -1)
+			if(error && sd != -1)
 			{
-				if(shutdown(socketd, SHUT_RDWR) == -1)
+				if(shutdown(sd, SHUT_RDWR) == -1)
 				{
 					perror("clientInitSocket : shutdown");
 				}
 				
-				if(close(socketd) == -1)
+				if(close(sd) == -1)
 				{
 					perror("clientInitSocket : close");
 				}
-				socketd = -1;
+				sd = -1;
 			}
 		}
 		else
@@ -90,7 +90,7 @@ int clientInitSocket(unsigned int port, char const *servAddr)
 		fprintf(stderr, "clientInitSocket : gethostbyname");
 	}
 	
-	return socketd;
+	return sd;
 }
 
 /**

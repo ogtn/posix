@@ -6,6 +6,7 @@ CFLAGS=-W -Wall -Wextra -pedantic -ansi -lpthread
 SRC=src/
 OBJ=obj/
 BIN=bin/
+TEST=test/
 OPT = -l pthread
 HEADER=include/
 # Compilateur utilisé
@@ -38,6 +39,12 @@ $(OBJ)locker.o: $(SRC)locker.c $(HEADER)locker.h $(HEADER)list.h $(HEADER)tools.
 
 runclient: client
 	./${BIN}client
+
+$(OBJ)file.o: $(SRC)file.c $(HEADER)file.h
+	$(CC) $(CFLAGS) -c $(SRC)file.c -o $(OBJ)file.o
+
+testFile: $(TEST)testFile.c $(OBJ)file.o $(OBJ)tools.o
+	$(CC) $(CFLAGS) $(OBJ)file.o $(OBJ)tools.o $(TEST)testFile.c -o $(BIN)testFile $(OPT)
 
 clean:
 	rm -rf bin/* obj/*

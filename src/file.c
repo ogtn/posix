@@ -3,6 +3,7 @@
 #define N 5
 #define BUFFER_SIZE 1000
 
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -16,18 +17,16 @@
 #include "file.h"
 #include "tools.h"
 
+typedef void (*routine)(void*);
+
 /**
  * Paramètre des threads
  */
 typedef struct Arg
 {
-    union
-    {
-        int port;                   /* Port */
-        int sd;						/* Descripteur de socket */
-    } integer;
-    char * dirPath;					/* Path vers le dossier ou l'on 
-                                    récupére les fichiers du serveur */
+    int sd;						/* Descripteur de socket */
+    char * dirPath;				/* Path vers le dossier ou l'on 
+                                récupére les fichiers du serveur */
 } Arg;
 
 /**
@@ -56,11 +55,11 @@ static void freeArg(Arg ** arg)
  * \param path
  * 		Path vers le dossier ou l'on récupére les fichiers du serveur.
  * \param sd
- * 		Descripteur de socket traité par la thread.                     ......
+ * 		Descripteur de socket traité par la thread.
  * 
  * \return Un objet alloué et initialisé ou NULL si l'allocation échoue.
  */
-static Arg * initArg(char const * path, int integer)
+static Arg * initArg(char const * path, int sd)
 {
 	Arg * arg = malloc(sizeof(Arg));
 	int error = 0;
@@ -72,14 +71,13 @@ static Arg * initArg(char const * path, int integer)
 		if(arg->dirPath != NULL)
 		{
 			strcpy(arg->dirPath, path);
-			arg->integer.sd = integer;
+			arg->sd = sd;
 		}
 		else
 		{
 			perror("initArg : malloc");
 			error = 1;
 		}
-		
 	}
 	else
 	{
@@ -88,11 +86,199 @@ static Arg * initArg(char const * path, int integer)
 	}
 	
 	if(error)
-	{
 		freeArg(&arg);
-	}
 	
 	return arg;
+}
+
+/**
+ * Envoie un fichier dans une socket.
+ * 
+ * \param path
+ * 		Le path du fichier à envoyer dans la socket.
+ * 
+ * \param sd
+ * 		Le descripteur de la socket dans laquelle on envoie le fichier.
+ * 
+ * \return -1 si une erreur c'est produite, 0 sinon.
+ */
+static int sendFile(char const * path, int sd)
+{
+	int error = 0;
+	
+    int fd = open(path, O_RDONLY);
+    
+    if(fd != -1)
+    {
+        char file[1000];
+        
+        /* Lecture d'une partie du fichier */
+        int nbRead = read(fd, file, 1000 * sizeof(char));
+        
+        while(nbRead != -1 && nbRead != 0 && error == 0)
+        {
+            /* Envoi d'une partie du fichier */
+            if(send(sd, file, nbRead, 0) != -1)
+            {
+                nbRead = read(fd, file, 1000 * sizeof(char));
+            }
+            else
+            {
+                error = 1;
+                perror("sendFile : send");
+            }
+        }
+        
+        if(nbRead == -1)
+        {
+            error = 1;
+            perror("sendFile : read");
+        }
+    }
+    else
+    {
+        error = 1;
+        perror("sendFile : open");
+    }
+	
+    if(fd != -1)
+        close(fd);
+    
+	return error == 1 ? -1 : 0;
+}
+
+/**
+ * Code de la thread qui traite une connection d'un client.
+ * 
+ * \param p 
+ * 		Paramètre de création de la thread.
+ */
+static void * threadConnection(void * p)
+{
+	Arg * arg = p;
+	
+	int recvr = 0; 
+	char name[256];
+	
+	/* Récupération du nom du fichier à télécharger */
+	recvr = recv(arg->sd, name, sizeof(char) * 256, 0);
+	if(recvr != -1)
+	{
+		/* Création du path vers le fichier à envoyer */
+		size_t size = sizeof(char) * (strlen(arg->dirPath) + strlen(name) + 1);
+		char * pathName = malloc(size);
+		
+		if(pathName != NULL)
+		{
+			strcpy(pathName, arg->dirPath);
+			strcat(pathName, name);
+			
+			sendFile(pathName, arg->sd);
+			
+			free(pathName);
+			pathName = NULL;
+			
+			close(arg->sd);
+		}
+	}
+	else
+	{
+		perror("downloadFile : recv");
+	}
+	
+    freeArg(&arg);
+    
+	return NULL;
+}
+
+static void myShutdown(void * arg)
+{
+    int * sd = arg;
+    shutdown(*sd, SHUT_RDWR);
+}
+
+/**
+ * Code du thread server qui attend les connections des clients.
+ * 
+ * \param p
+ *      Les arguments passés au thread.
+ */
+static void * threadServer(void * p)
+{
+    Arg * serverArg = p;
+    pthread_attr_t attr;
+    int errorAttrInit;
+    
+    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+    
+    pthread_cleanup_push((routine)freeArg, &serverArg);
+    pthread_cleanup_push((routine)close, &(serverArg->sd));
+    pthread_cleanup_push((routine)myShutdown, &(serverArg->sd));
+    
+    /* Thread daemon */
+    errorAttrInit = pthread_attr_init(&attr);
+    if(errorAttrInit != 0)
+    {
+        fprintf(stderr, "threadServer : pthread_attr_init %s", 
+                strerror(errorAttrInit));
+        pthread_exit(0);
+    }
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    
+    pthread_cleanup_push((routine)pthread_attr_destroy, &attr);
+    
+    while(1)
+    {
+        pthread_t tid;
+        int error = 1, errCreate = -1;
+        Arg * connectArg = NULL;
+        int acceptSd = -1;
+        
+        pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+        
+        /* Accepte une connection du client */
+        acceptSd = accept(serverArg->sd, NULL, NULL);
+        if(acceptSd == -1)
+        {
+            perror("threadServer : accept");
+            goto out;
+        }
+        
+        pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+                
+        /* Arguments de la thread */
+        connectArg = initArg(serverArg->dirPath, acceptSd);            
+        if(connectArg == NULL)
+            goto out;
+        
+        /* Création du thread de gestion de la connection */
+        errCreate = pthread_create(&tid, &attr, threadConnection, connectArg);
+        if(errCreate != 0)
+        {
+            fprintf(stderr, "threadServer : pthread_create %s", 
+                    strerror(errCreate));
+            goto out;
+        }
+        else
+            error = 0;
+        
+        /* Libération des ressources */
+        out :
+            if(error)
+            {
+                if(acceptSd != -1)
+                    close(acceptSd);
+                
+                freeArg(&connectArg);
+            }
+    }
+    
+    pthread_cleanup_pop(1);
+    pthread_cleanup_pop(1);
+    pthread_cleanup_pop(1);
+    pthread_cleanup_pop(1);
+    
+    return NULL;
 }
 
 /**
@@ -164,7 +350,7 @@ int downloadFile(char const * path, char * const name, int port, char * servAddr
     
     /* Récupération d'une partie du fichier */
     nbByte = recv(sd, buff, sizeof(char) * 1000, 0);
-					
+    
     while(nbByte != -1 && nbByte != 0)
     {
         /* Ecriture d'une partie du fichier */
@@ -211,187 +397,6 @@ int downloadFile(char const * path, char * const name, int port, char * servAddr
 }
 
 /**
- * Envoie un fichier dans une socket.
- * 
- * \param path
- * 		Le path du fichier à envoyer dans la socket.
- * 
- * \param sd
- * 		Le descripteur de la socket dans laquelle on envoie le fichier.
- * 
- * \return -1 si une erreur c'est produite, 0 sinon.
- */
-static int sendFile(char const * path, int sd)
-{
-	int error = 0;
-	
-    int fd = open(path, O_RDONLY);
-    if(fd != -1)
-    {
-        char file[1000];
-        
-        /* Lecture d'une partie du fichier */
-        int nbRead = read(sd, file, 1000 * sizeof(char));
-        
-        while(nbRead != -1 && nbRead != 0 && error == 0)
-        {
-            /* Envoi d'une partie du fichier */
-            if(send(sd, file, nbRead, 0) != -1)
-            {
-                nbRead = read(sd, file, 1000 * sizeof(char));
-            }
-            else
-            {
-                error = 1;
-                perror("sendFile : send");
-            }
-        }
-        
-        if(nbRead == -1)
-        {
-            error = 1;
-            perror("sendFile : read");
-        }
-    }
-    else
-    {
-        error = 1;
-        perror("sendFile : open");
-    }
-	
-    if(fd != -1)
-        close(fd);
-    
-	return error == 1 ? -1 : 0;
-}
-
-/**
- * Code de la thread qui traite une connection d'un client.
- * 
- * \param p 
- * 		Paramètre de création de la thread.
- */
-static void * threadConnection(void * p)
-{
-	Arg * arg = p;
-	
-	int recvr = 0; 
-	char name[256];
-	
-	/* Récupération du nom du fichier à télécharger */
-	recvr = recv(arg->integer.sd, name, sizeof(char) * 256, 0);
-	if(recvr != -1)
-	{
-		/* Création du path vers le fichier à envoyer */
-		size_t size = sizeof(char) * (strlen(arg->dirPath) + strlen(name) + 1);
-		char * pathName = malloc(size);
-		
-		if(pathName != NULL)
-		{
-			strcpy(pathName, arg->dirPath);
-			strcat(pathName, name);
-			
-			printf("path %s \n", pathName);
-			
-			sendFile(pathName, arg->integer.sd);
-			
-			free(pathName);
-			pathName = NULL;
-			
-			close(arg->integer.sd);
-		}
-	}
-	else
-	{
-		perror("downloadFile : recv");
-	}
-	
-	return NULL;
-}
-
-/**
- * Code du thread server qui attend les connections des clients.
- * 
- * \param p
- *      Les arguments passés au thread.
- */
-static void * threadServer(void * p)
-{
-    Arg * serverArg = p;
-    int serverSd = -1;
-    
-    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-    
-    /* Création de la socket en attente de connection */
-    serverSd = serverInitSocket(serverArg->integer.port, N);
-    
-    if(serverSd == -1)
-        return NULL;
-    
-    while(1)
-    {
-        pthread_t tid;
-        pthread_attr_t attr;
-        int error = 0, errorAttrInit = 0, errorThreadCreate = 0;
-        Arg * connectArg = NULL;
-        int acceptSd = -1;
-        
-        pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
-        
-        /* Accepte une connection du client */
-        acceptSd = accept(serverSd, NULL, NULL);
-        if(acceptSd == -1)
-        {
-            perror("threadServer : accept");
-            error = 1;
-            goto out;
-        }
-        
-        pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-        
-        /* Thread daemon */
-        errorAttrInit = pthread_attr_init(&attr);
-        if(errorAttrInit != 0)
-        {
-            fprintf(stderr, "pthread_attr_init %s", strerror(errorAttrInit));
-            error = 1;
-            goto out;
-        }
-        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-        
-        /* Arguments de la thread */
-        connectArg = initArg(serverArg->dirPath, acceptSd);            
-        if(connectArg == NULL)
-        {
-            error = 1;
-            goto out;
-        }
-        
-        /* Création du thread de gestion de la connection */
-        errorThreadCreate = pthread_create(&tid, &attr, threadConnection, connectArg);
-        if(errorThreadCreate != 0)
-        {
-            fprintf(stderr, "pthread_create %s", strerror(errorThreadCreate));
-            error = 1;
-            goto out;
-        }
-        
-        /* Libération des ressources */
-        out :
-            if(error)
-            {
-                if(acceptSd != -1)
-                    close(acceptSd);
-                
-                freeArg(&connectArg);
-            }
-            
-            if(errorAttrInit == 0)
-                pthread_attr_destroy(&attr);
-    }
-}
-
-/**
  * Lance un serveur de téléchargement de fichiers.
  * 
  * \param dirPath
@@ -401,114 +406,90 @@ static void * threadServer(void * p)
  * 
  * \return Le tid du thread lancé ou une -1 sinon.
  */
-pthread_t runServer(char const * dirPath, unsigned int port)
+serverId runServer(char const * dirPath, unsigned int port)
 {
-    pthread_t tid = -1;
+    serverId id;
     pthread_attr_t attr;
-    int errorAttrInit = 0, error = 0;
+    int errorAttrInit = -1, error = 1, sd = -1;
     Arg * arg = NULL;
     
     if(dirPath == NULL || dirPath[strlen(dirPath)-1] != '/' || fileExist(dirPath, DIRECTORY) != 1)
     {
         fprintf(stderr, "runServer : mauvais paramètres ");
-        error = 1;
         goto out;
     }
     
-    /* Arguments de la thread */
-    arg = initArg(dirPath, port);
-    if(arg == NULL)
-    {
-        error = 1;
+    /* Création de la socket en attente de connection */
+    sd = serverInitSocket(port, N);
+    
+    if(sd == -1)
         goto out;
-    }
+    
+    /* Arguments de la thread */
+    arg = initArg(dirPath, sd);
+    if(arg == NULL)
+        goto out;
     
     /* Thread daemon */
     errorAttrInit = pthread_attr_init(&attr);
     if(errorAttrInit != 0)
     {
-        fprintf(stderr, "pthread_create %s", strerror(error));
-        error = 1;
+        fprintf(stderr, "runServer : pthread_create %s", strerror(error));
         goto out;
     }
     
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
     
     /* Création du thread serveur */
-    error = pthread_create(&tid, &attr, threadServer, arg);
+    error = pthread_create(&id.tid, &attr, threadServer, arg);
     if(error != 0)
-    {
-        fprintf(stderr, "pthread_create %s", strerror(error));
-        error = 1;
-    }
-	
+        fprintf(stderr, "runServer : pthread_create %s", strerror(error));
+    
     /* Libération des ressources */
     out :
         if(error)
+        {
             freeArg(&arg);
+            if(sd != -1)
+                close(sd);
+        }
         
         if(errorAttrInit == 0)
             pthread_attr_destroy(&attr);
     
-	return error ? -1 : tid;
+    id.isValid = error == 0;
+    
+	return id;
 }
 
-int stopServer(pthread_t tid)
+/**
+ * Stop le serveur de téléchargement de fichiers.
+ * 
+ * \param dirPath
+ *      Le path du dossier contenant les fichiers à télécharger.
+ * \param port
+ *      Le port sur lequel le serveur se lance.
+ * 
+ * \return 0 si le serveur a pu être stoppé -1 sinon.
+ */
+int stopServer(serverId * id)
 {
-    if(tid > 0)
-    {
-        pthread_cancel(tid);
-    }
-}
-
-int main(void)
-{
-    pthread_t tid = runServer("/tmp/dir/", 58998);
+    int retVal = 0, error = 1;
     
-    sleep(5);
-    
-    if(fork() == 0)
+    if(id->isValid)
     {
-        if(fork() == 0)
+        error = pthread_cancel(id->tid);
+        if(error != 0)
         {
-            downloadFile("/tmp/dir2/", "test", 58998, "127.0.0.1");    
-            exit(0);
+            fprintf(stderr, "stopServer : pthread_cancel %s \n", 
+                    strerror(error));
+            retVal = -1;
         }
         else
-            if(fork() == 0)
-            {
-                downloadFile("/tmp/dir2/", "test2", 58998, "127.0.0.1");    
-                exit(0);
-            }
-            else
-                exit(0);
+        {
+            id->isValid = 0;
+        }
     }
     
-    sleep(10);
-    
-    stopServer(tid);
-    
-    return 0;
+    return retVal;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
