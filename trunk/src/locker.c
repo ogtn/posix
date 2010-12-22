@@ -98,6 +98,13 @@ int lockerInit(locker *locker, char const *dirPath, char const *servAddr, unsign
     {
         DIR * dir = opendir(dirPath);
         
+        locker->sd = -1;
+        locker->lockedReadFiles = NULL;
+        locker->lockedWriteFiles = NULL;
+        locker->files = NULL;
+        locker->path = NULL;
+        locker->servId.isValid = 0;      
+        
         locker->path = malloc(strlen(dirPath) + 1);
         if(locker->path == NULL)
         {
@@ -139,17 +146,19 @@ int lockerInit(locker *locker, char const *dirPath, char const *servAddr, unsign
                         locker->sd = clientInitSocket(server_port, servAddr);
                         if(locker->sd != -1)
                         {
-                            printf("port: %d\n", client_port);
-                            client_port = htonl(client_port);
-                            printf("port: %d\n", client_port);
                             
-                            if(send(locker->sd, &client_port, sizeof(long), 0) == -1)
+                            printf("port: %d\n", client_port);
+                            int convert_client_port = htonl(client_port);
+                            printf("port: %d\n", convert_client_port);
+                            
+                            if(send(locker->sd, &convert_client_port, sizeof(long), 0) == -1)
                             {
                                 lockerClose(locker);
                                 retVal = -1; 
                             }
                             else
                             {
+                                printf("RUN \n");
                                 locker->servId = runServer(dirPath, client_port);
                                 if(locker->servId.isValid)
                                     retVal = 0;

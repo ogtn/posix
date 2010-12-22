@@ -30,7 +30,7 @@ int main(int argc, char** argv)
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
     
     while(1)
-    { 
+    {
         a = malloc(sizeof(args));
         a->sharedFiles = sharedFiles;
         a->nbFiles = nbFiles;
