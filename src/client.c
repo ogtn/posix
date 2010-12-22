@@ -22,7 +22,7 @@ int main(int argc, char** argv)
     locker l;
 	
 	/* Connection au serveur */
-	if(lockerInit(&l, "./src", "localhost", 10000, 4242) != -1)
+	if(lockerInit(&l, "./test/serverDir", "localhost", 10000, 4242) != -1)
 	{            
         while(type != QUIT)
         {            
