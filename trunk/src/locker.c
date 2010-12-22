@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <netinet/in.h>
 
+#include "file.h"
 #include "locker.h"
 
 typedef struct localFile
@@ -52,6 +53,9 @@ static void lockerClose(locker * locker)
         {
             listDestroyed(&(locker->files), 1);
         }
+        
+        if(locker->servId.isValid)
+            stopServer(&locker->servId);
     }
 }
 
@@ -93,6 +97,15 @@ int lockerInit(locker *locker, char const *dirPath, char const *servAddr, unsign
     if(locker != NULL && dirPath != NULL && servAddr != NULL)
     {
         DIR * dir = opendir(dirPath);
+        
+        locker->path = malloc(strlen(dirPath) + 1);
+        if(locker->path == NULL)
+        {
+            printf("PVB \n");
+        }
+        
+        strcpy(locker->path, dirPath);
+        
         if(dir != NULL)
         {
             locker->files = newList();
@@ -136,7 +149,11 @@ int lockerInit(locker *locker, char const *dirPath, char const *servAddr, unsign
                                 retVal = -1; 
                             }
                             else
-                                retVal = 0;
+                            {
+                                locker->servId = runServer(dirPath, client_port);
+                                if(locker->servId.isValid)
+                                    retVal = 0;
+                            }
                         }
                     }
                 }
@@ -215,13 +232,21 @@ enum lockError lock(locker const *locker, char const *fileName, enum msgType typ
                             
                             retVal = OK;
                             {
-                            char type;                  /* Type du message, voir enum msgType */
-                            unsigned int port;          /* Le port du propriétaire de la derniere version du fichier */
-                            long clientAddr;
+                                char type;                  /* Type du message, voir enum msgType */
+                                unsigned int port;          /* Le port du propriétaire de la derniere version du fichier */
+                                long clientAddr;
                             
-                            if(msgSC.type == UPDATE_NEEDED)
-                                printf("Besoin d'un update depuis %s:%d\n", msgSC.addr, ntohl(msgSC.port));
-                        }}
+                                if(msgSC.type == UPDATE_NEEDED)
+                                {
+                                    printf("Besoin d'un update depuis %s:%d\n", msgSC.addr, ntohl(msgSC.port));
+                                    
+                                    if(downloadFile(locker->path, fileName, ntohl(msgSC.port), msgSC.addr) == -1)
+                                    {
+                                        retVal = CAN_T_DOWNLOAD;
+                                    }
+                                }
+                            }
+                        }
                         else
                         {
                             retVal = CAN_T_RECV;

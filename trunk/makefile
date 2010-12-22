@@ -28,14 +28,14 @@ runserver: server
 
 client: $(BIN)client
 
-$(BIN)client: $(SRC)client.c $(OBJ)tools.o $(OBJ)locker.o $(OBJ)list.o $(HEADER)client.h
-	$(CC) $(CFLAGS) $(OBJ)tools.o $(OBJ)locker.o $(OBJ)list.o $(SRC)client.c -o $(BIN)client
+$(BIN)client: $(SRC)client.c $(OBJ)tools.o $(OBJ)file.o $(OBJ)locker.o $(OBJ)list.o $(HEADER)client.h
+	$(CC) $(CFLAGS) $(OBJ)tools.o $(OBJ)file.o  $(OBJ)locker.o $(OBJ)list.o $(SRC)client.c -o $(BIN)client
 
 $(OBJ)tools.o: $(SRC)tools.c $(HEADER)tools.h
 	$(CC) $(CFLAGS) -c $(SRC)tools.c -o $(OBJ)tools.o
 
 $(OBJ)locker.o: $(SRC)locker.c $(HEADER)locker.h $(HEADER)list.h $(HEADER)tools.h
-	$(CC) $(CFLAGS) -c $(SRC)locker.c -o $(OBJ)locker.o
+	$(CC) $(CFLAGS) -c $(SRC)locker.c -o $(OBJ)locker.o $(OPT)
 
 runclient: client
 	./${BIN}client

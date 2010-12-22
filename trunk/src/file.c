@@ -12,7 +12,6 @@
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <pthread.h>
 
 #include "file.h"
 #include "tools.h"
@@ -294,7 +293,7 @@ static void * threadServer(void * p)
  *      L'adresse de connection au serveur.
  * \return -1 si la fonction échoue, 0 sinon.
  */
-int downloadFile(char const * path, char * const name, int port, char * servAddr)
+int downloadFile(char const * path, char const * name, int port, char * servAddr)
 {
     int fd = -1;
     int sd = -1;
