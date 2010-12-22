@@ -208,6 +208,8 @@ static void * threadServer(void * p)
     pthread_attr_t attr;
     int errorAttrInit;
     
+    printf("Lancment du threadServer \n");
+    
     pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
     
     pthread_cleanup_push((routine)freeArg, &serverArg);
@@ -232,6 +234,8 @@ static void * threadServer(void * p)
         int error = 1, errCreate = -1;
         Arg * connectArg = NULL;
         int acceptSd = -1;
+        
+        printf("threadServer \n");
         
         pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
         
@@ -418,9 +422,10 @@ serverId runServer(char const * dirPath, unsigned int port)
         goto out;
     }
     
+    printf("PRINTF du threadServer PORT : %d \n", port);
+    
     /* Création de la socket en attente de connection */
     sd = serverInitSocket(port, N);
-    
     if(sd == -1)
         goto out;
     

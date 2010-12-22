@@ -21,8 +21,17 @@ int main(int argc, char** argv)
     char fileName[FILE_SIZE];
     locker l;
 	
+    char * dirPath = "./test/serverDir";
+    int port = 4242;
+    
+    if(argc == 3)
+    {
+        dirPath = argv[1];
+        port = atoi(argv[2]);
+    }
+    
 	/* Connection au serveur */
-	if(lockerInit(&l, "./test/serverDir", "localhost", 10000, 4242) != -1)
+	if(lockerInit(&l, dirPath, "localhost", 10000, port) != -1)
 	{            
         while(type != QUIT)
         {            

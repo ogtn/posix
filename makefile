@@ -29,7 +29,7 @@ runserver: server
 client: $(BIN)client
 
 $(BIN)client: $(SRC)client.c $(OBJ)tools.o $(OBJ)file.o $(OBJ)locker.o $(OBJ)list.o $(HEADER)client.h
-	$(CC) $(CFLAGS) $(OBJ)tools.o $(OBJ)file.o  $(OBJ)locker.o $(OBJ)list.o $(SRC)client.c -o $(BIN)client
+	$(CC) $(CFLAGS) $(OBJ)tools.o $(OBJ)file.o $(OBJ)locker.o $(OBJ)list.o $(SRC)client.c -o $(BIN)client
 
 $(OBJ)tools.o: $(SRC)tools.c $(HEADER)tools.h
 	$(CC) $(CFLAGS) -c $(SRC)tools.c -o $(OBJ)tools.o
@@ -43,8 +43,20 @@ runclient: client
 $(OBJ)file.o: $(SRC)file.c $(HEADER)file.h
 	$(CC) $(CFLAGS) -c $(SRC)file.c -o $(OBJ)file.o
 
-testFile: $(TEST)testFile.c $(OBJ)file.o $(OBJ)tools.o
-	$(CC) $(CFLAGS) $(OBJ)file.o $(OBJ)tools.o $(TEST)testFile.c -o $(BIN)testFile $(OPT)
+# test
+
+$(OBJ)testTools.o : $(SRC)testTools.c $(HEADER)testTools.h
+	$(CC) $(CFLAGS) -c $(SRC)testTools.c -o $(OBJ)testTools.o
+
+testFile: $(BIN)testFile
+
+$(BIN)testFile: $(TEST)testFile.c $(OBJ)file.o $(OBJ)tools.o
+	$(CC) $(CFLAGS) $(OBJ)file.o $(OBJ)tools.o $(TEST)testFile.c -o $(BIN)testFile
+
+testLocker: $(BIN)testLocker
+
+$(BIN)testLocker: $(TEST)testLocker.c $(OBJ)tools.o $(OBJ)file.o $(OBJ)list.o $(OBJ)testTools.o $(OBJ)locker.o
+	$(CC) $(CFLAGS) $(OBJ)list.o $(OBJ)tools.o $(OBJ)file.o $(OBJ)testTools.o $(OBJ)locker.o $(TEST)testLocker.c -o $(BIN)testLocker
 
 clean:
 	rm -rf bin/* obj/*
