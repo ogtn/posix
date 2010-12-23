@@ -207,6 +207,7 @@ sharedFile *getFiles(int *nbFiles)
     sharedFile *sharedFiles, *file;
     FILE *fic = fopen("files.txt", "r");
     *nbFiles = 0;
+    int i;
         
     while(fgets(buff, 256, fic))
         (*nbFiles)++;
@@ -228,6 +229,10 @@ sharedFile *getFiles(int *nbFiles)
         file->version = 0;
         file->lockList = newList();
         pthread_mutex_init(&file->mutex, NULL);
+        
+        for(i = 0; i < BACKLOG; i++)
+			pthread_cond_init(&file->conds[i], NULL);
+			
         pthread_cond_init(&file->cond, NULL);
         
         file++;
@@ -262,6 +267,12 @@ void lockRead(sharedFile *sf, messageCS *msgCS, int sd)
     while(sf->isWriteLock || ((request *)(sf->lockList->head->data))->socketDescriptor != sd) 
         pthread_cond_wait(&sf->cond, &sf->mutex);
     
+    /*
+    printf("lockRead(): client %d avant cond\n", sf->clientIndex);
+    pthread_cond_wait(&sf->conds[sf->clientIndex], &sf->mutex);
+    printf("lockRead(): client %d après cond\n", sf->clientIndex);
+    */
+    
     rq = getHead(sf->lockList);
 
     printf("Demande de lock en écriture sur le fichier \"%s\"\n", sf->fileName);
@@ -290,6 +301,8 @@ void lockRead(sharedFile *sf, messageCS *msgCS, int sd)
     
     pthread_mutex_unlock(&sf->mutex);
     pthread_cond_broadcast(&sf->cond);
+    /*pthread_cond_signal(&sf->conds[?????]);*/
+    
     if(send(rq->socketDescriptor, &msgSC, sizeof(messageSC), 0) == -1)
         perror("send()");
     
@@ -307,7 +320,12 @@ void lockWrite(sharedFile *sf, messageCS *msgCS, int sd)
     
     while(sf->isWriteLock || sf->nbReadLock > 0 || ((request *)(sf->lockList->head->data))->socketDescriptor != sd) 
         pthread_cond_wait(&sf->cond, &sf->mutex);
-
+  
+	/*
+    printf("lockWrite(): client %d avant cond\n", sf->clientIndex);
+    pthread_cond_wait(&sf->conds[sf->clientIndex], &sf->mutex);
+    printf("lockWrite(): client %d après cond\n", sf->clientIndex);
+	*/
     rq = getHead(sf->lockList);
     
     /* Verification de la version */
@@ -341,7 +359,8 @@ void unlockRead(sharedFile *sf)
     /* On debloque le fichier si aucun autre lecteur ne persiste */
     if(sf->nbReadLock == 0)
     {
-        pthread_cond_broadcast(&sf->cond);
+		pthread_cond_broadcast(&sf->cond);
+        /*pthread_cond_signal(&sf->conds[???]);*/
         printf("Lecture terminée: le fichier \"%s\" est libre\n", sf->fileName);
     }
     else
@@ -360,24 +379,6 @@ void unlockWrite(sharedFile *sf, char *addr, long port)
     sf->lastVersionPort = port;
     pthread_mutex_unlock(&sf->mutex);
     pthread_cond_broadcast(&sf->cond);
+    /*pthread_cond_signal(&sf->conds[???]);*/
     printf("Ecriture terminée: le fichier \"%s\" est libre\n", sf->fileName);
 }
-
-
-
-/* Pour le tableau de conditions:
-	il faut noter dans les requetes le numero du client appelant => l'indice
-	de la condition dans le tableau de conditions.
-	
-	La merde étant d'attriber un bon numero au client qui se connecte
-	(à faire dans la thread main, avec un tableau des clients connectés.
-	
-	La structure agrs devient server: elle contient uniquement des ptrs,
-	et un entier qui est l'identifiant du client.
-	
-	Il faut en passer une copie à chaque thread mainloop, car l'entier doit être
-	différent pour chauque, et les ptrs doivent pointer sur les mêmes données
-	communes (sharedFile, nb de client loggés etc...)
-	
-	Rajouter un ptr de semaphore va peut être être necessaire dans la structure,
-	pour poteger les membres (à voir si on les modifie au cours sde l'execution */
