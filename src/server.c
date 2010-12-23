@@ -98,9 +98,9 @@ void *mainLoop(void *data)
     int index;
     
     pthread_mutex_lock(s->mutex);
-    *s->nbClients++;
-    printf("Un nouveau client d'identifiant %d vient de se connecter", s->clientIndex);
-    printf("Il y a maintenant %d clients connectés\n", *s->nbClients);
+    (*s->nbClients)++;
+    printf("Un nouveau client d'identifiant %d vient de se connecter\n", s->clientIndex);
+    printf("Il y a maintenant %d client(s) connecté(s)\n", *s->nbClients);
     pthread_mutex_unlock(s->mutex);
     
     while(!stop)
@@ -157,7 +157,6 @@ void *mainLoop(void *data)
             default:
                 puts("ouatafocindaplace");
         }
-        puts("===============");
     }
     
     free(s);
@@ -180,9 +179,10 @@ void deco(sharedFile *sharedFiles, server *s)
     }
     
     pthread_mutex_lock(s->mutex);
-    *s->nbClients--;
-    printf("Le client d'identifiant %d vient de se deconnecter", s->clientIndex);
-    printf("Il reste maintenant %d clients connectés\n", *s->nbClients);
+    (*s->nbClients)--;
+    s->clients[s->clientIndex] = UNUSED;
+    printf("Le client d'identifiant %d vient de se deconnecter\n", s->clientIndex);
+    printf("Il reste maintenant %d client(s) connecté(s)\n", *s->nbClients);
     pthread_mutex_unlock(s->mutex);
 }
 
