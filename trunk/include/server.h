@@ -11,6 +11,8 @@
 
 #define BACKLOG     5
 #define NOT_FOUND   -1
+#define UNUSED		0
+#define USED		1
 
 /*			=======================[Structures]=======================		  */
 
@@ -39,14 +41,18 @@ typedef struct request
 } request;
 
 
-typedef struct args
+typedef struct server
 {
-    sharedFile *sharedFiles;
-    long lastVersionPort;       /* Port de du possesseur de la derniere version */
-    char lastVersionAddr[16];   /* Adresse ip du possesseur de la derniere version */
-    int nbFiles;
-    int sd;
-} args;
+    sharedFile *sharedFiles;		/* Tableau des fichiers partagés */
+    int nbFiles;					/* Nombre de fichiers partagés */
+    int clientIndex;				/* Identifiant du client */
+    long clientPort;       			/* Port du client */
+    char clientAddr[16];   			/* Adresse ip du client */
+    int sd;							/* Socket de communication avec le client */
+    int *clients;					/* Tableau des clients */
+    int *nbClients;					/* Nombre de clients connectés */
+    pthread_mutex_t *mutex;			/* Mutex pour proteger l'accès aux données du serveur */
+} server;
 
 /*			=======================[Prototypes]=======================		  */
 
@@ -68,6 +74,6 @@ void unlockRead(sharedFile *sf);
 
 void unlockWrite(sharedFile *sf, char *addr, long port);
 
-void deco(sharedFile *sharedFiles, args *a);
+void deco(sharedFile *sharedFiles, server *s);
 
 #endif

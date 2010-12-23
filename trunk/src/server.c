@@ -18,9 +18,16 @@ int main(int argc, char** argv)
     int port = 10000;
     int nbFiles;
 	int sock;
-    args *a;
+    server *s;
     socklen_t sz = sizeof(struct sockaddr_in);
     struct sockaddr_in ad;
+    int clients[BACKLOG];
+    int i;
+    int nbClients = 0;
+    pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+    
+    for(i = 0; i < BACKLOG; i++)
+		clients[i] = UNUSED;
     
     if((sock = serverInitSocket(port, BACKLOG)) == -1)
         perror("initSocket()");
@@ -31,24 +38,46 @@ int main(int argc, char** argv)
     
     while(1)
     {
-        a = malloc(sizeof(args));
-        a->sharedFiles = sharedFiles;
-        a->nbFiles = nbFiles;
+        s = malloc(sizeof(server));
+        s->sharedFiles = sharedFiles;
+        s->nbFiles = nbFiles;
+        s->clients = clients;
+        s->nbClients = &nbClients;
+        s->mutex = &mutex;
 
-        if((a->sd = accept(sock, (struct sockaddr *)&ad, &sz)) != -1)
+        if((s->sd = accept(sock, (struct sockaddr *)&ad, &sz)) != -1)
         {
             long p;
             
-            if(recv(a->sd, &p, sizeof(long), 0) == -1)
+            if(recv(s->sd, &p, sizeof(long), 0) == -1)
             {
                 perror("recv");
-                close(a->sd);
+                close(s->sd);
                 continue;
             }
             
-            strcpy(a->lastVersionAddr, inet_ntoa(ad.sin_addr));
-            a->lastVersionPort = ntohl(p);
-            pthread_create(&tid, &attr, mainLoop, a);    
+            pthread_mutex_lock(&mutex);
+            for(i = 0; i < BACKLOG; i++)
+			{
+				if(clients[i] == UNUSED)
+				{
+					clients[i] = USED;
+					s->clientIndex = i;
+					break;
+				}
+			}
+			
+			if(i == BACKLOG)
+			{
+				puts("Oups, trop de clients connectés!");
+				return EXIT_FAILURE;
+			}
+			
+			pthread_mutex_unlock(&mutex);
+            
+            strcpy(s->clientAddr, inet_ntoa(ad.sin_addr));
+            s->clientPort = ntohl(p);
+            pthread_create(&tid, &attr, mainLoop, s);    
         }
         else
             perror("accept()");
@@ -63,25 +92,29 @@ int main(int argc, char** argv)
 void *mainLoop(void *data)
 {
     int stop = !QUIT;
-    args *a = data;
+    server *s = data;
     sharedFile *sf;
     messageCS msg;
     int index;
     
-    puts("Un nouveau client vient de se connecter");
+    pthread_mutex_lock(s->mutex);
+    *s->nbClients++;
+    printf("Un nouveau client d'identifiant %d vient de se connecter", s->clientIndex);
+    printf("Il y a maintenant %d clients connectés\n", *s->nbClients);
+    pthread_mutex_unlock(s->mutex);
     
     while(!stop)
     {
-        if(recv(a->sd, &msg, sizeof(messageCS), 0) == -1)
+        if(recv(s->sd, &msg, sizeof(messageCS), 0) == -1)
         {
             perror("recv");
             return NULL;
         }
         
-        index = find(a->sharedFiles, a->nbFiles, msg.fileName);
+        index = find(s->sharedFiles, s->nbFiles, msg.fileName);
         if(index != NOT_FOUND)
         {
-            sf = &a->sharedFiles[index];
+            sf = &s->sharedFiles[index];
             msg.version = ntohl(msg.version);
         }
         
@@ -93,7 +126,7 @@ void *mainLoop(void *data)
             ack.type = ERROR;
             printf("Le fichier \"%s\" ne fait pas partit du repertoire.\n", msg.fileName);
             
-            if(send(a->sd, &ack, sizeof(messageSC), 0) == -1)
+            if(send(s->sd, &ack, sizeof(messageSC), 0) == -1)
                 perror("send()");
                 
             continue;
@@ -102,10 +135,10 @@ void *mainLoop(void *data)
         switch(msg.type)
         {
             case LOCK_READ:
-                lockRead(sf, &msg, a->sd);
+                lockRead(sf, &msg, s->sd);
             break;
             case LOCK_WRITE:
-                lockWrite(sf, &msg, a->sd);
+                lockWrite(sf, &msg, s->sd);
             break;
             
             case UNLOCK_READ:
@@ -113,11 +146,11 @@ void *mainLoop(void *data)
             break;
             
             case UNLOCK_WRITE:
-                unlockWrite(sf, a->lastVersionAddr, a->lastVersionPort);
+                unlockWrite(sf, s->clientAddr, s->clientPort);
             break;
             
             case QUIT:
-                deco(sf, a);
+                deco(sf, s);
                 stop = QUIT;
             break;
             
@@ -127,25 +160,30 @@ void *mainLoop(void *data)
         puts("===============");
     }
     
-    free(a);
-    puts("Un client vient de se deconnecter");
-    
+    free(s);
+     
     return NULL;
 }
 
 
-void deco(sharedFile *sharedFiles, args *a)
+void deco(sharedFile *sharedFiles, server *s)
 {
     int i;
     
-    for(i = 0; i < a->nbFiles; i++)
+    for(i = 0; i < s->nbFiles; i++)
     {          
-        if(strcmp(sharedFiles[i].lastVersionAddr, a->lastVersionAddr) == 0
-        && sharedFiles[i].lastVersionPort == a->lastVersionPort)
+        if(strcmp(sharedFiles[i].lastVersionAddr, s->clientAddr) == 0
+        && sharedFiles[i].lastVersionPort == s->clientPort)
         {
-            printf("besoin de transferer %s depuis %s:%ld\n", sharedFiles[i].fileName, a->lastVersionAddr, a->lastVersionPort);
+            printf("besoin de transferer %s depuis %s:%ld\n", sharedFiles[i].fileName, s->clientAddr, s->clientPort);
         }
     }
+    
+    pthread_mutex_lock(s->mutex);
+    *s->nbClients--;
+    printf("Le client d'identifiant %d vient de se deconnecter", s->clientIndex);
+    printf("Il reste maintenant %d clients connectés\n", *s->nbClients);
+    pthread_mutex_unlock(s->mutex);
 }
 
 
@@ -324,3 +362,22 @@ void unlockWrite(sharedFile *sf, char *addr, long port)
     pthread_cond_broadcast(&sf->cond);
     printf("Ecriture terminée: le fichier \"%s\" est libre\n", sf->fileName);
 }
+
+
+
+/* Pour le tableau de conditions:
+	il faut noter dans les requetes le numero du client appelant => l'indice
+	de la condition dans le tableau de conditions.
+	
+	La merde étant d'attriber un bon numero au client qui se connecte
+	(à faire dans la thread main, avec un tableau des clients connectés.
+	
+	La structure agrs devient server: elle contient uniquement des ptrs,
+	et un entier qui est l'identifiant du client.
+	
+	Il faut en passer une copie à chaque thread mainloop, car l'entier doit être
+	différent pour chauque, et les ptrs doivent pointer sur les mêmes données
+	communes (sharedFile, nb de client loggés etc...)
+	
+	Rajouter un ptr de semaphore va peut être être necessaire dans la structure,
+	pour poteger les membres (à voir si on les modifie au cours sde l'execution */
