@@ -28,6 +28,7 @@ typedef struct sharedFile
 	list *lockList;             /* Liste des requetes de lock de fichiers */
     pthread_mutex_t mutex;      /* Mutex pour proteger l'acces à la structure */
     pthread_cond_t cond;        /* Condition signalant la présence d'un unlock dans la file */
+    pthread_cond_t *conds;		/* Tableau de conditions signalant la présence d'un unlock dans la file */
 } sharedFile;
 
 
@@ -38,6 +39,7 @@ typedef struct request
 	char fileName[FILE_SIZE];   /* Nom du fichier concerné */     
 	unsigned int version;       /* Version du fichier possédée par le client */
     int socketDescriptor;       /* Descripteur de socket utilisé pour les communications serveur -> client */
+    int clientIndex;			/* Identifiant du client */
 } request;
 
 
