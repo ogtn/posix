@@ -10,6 +10,7 @@
 
 #include "server.h"
 
+#define USE_SIMPLE_COND		0
 
 int main(int argc, char** argv)
 {
@@ -266,13 +267,14 @@ void lockRead(sharedFile *sf, messageCS *msgCS, server *s)
     pthread_mutex_lock(&sf->mutex);
     add(sf->lockList, rq);
     
-    #if 1
+    #if USE_SIMPLE_COND
     while(sf->isWriteLock || ((request *)(sf->lockList->head->data))->socketDescriptor != s->sd) 
         pthread_cond_wait(&sf->cond, &sf->mutex);
     #else
-    printf("lockRead(): client %d avant cond\n", sf->clientIndex);
-    pthread_cond_wait(&sf->conds[sf->clientIndex], &sf->mutex);
-    printf("lockRead(): client %d après cond\n", sf->clientIndex);
+    printf("lockRead(): client %d avant cond\n", s->clientIndex);
+    if(sf->isWriteLock)
+		pthread_cond_wait(&sf->conds[s->clientIndex], &sf->mutex);
+    printf("lockRead(): client %d après cond\n", s->clientIndex);
     #endif
     
     rq = getHead(sf->lockList);
@@ -301,13 +303,20 @@ void lockRead(sharedFile *sf, messageCS *msgCS, server *s)
         msgSC.type = LOCKED;
     }
     
-    pthread_mutex_unlock(&sf->mutex);
     
-    #if 1
+    #if USE_SIMPLE_COND
     pthread_cond_broadcast(&sf->cond);
     #else
-    pthread_cond_signal(&sf->conds[?????]);
-    #endif
+    if(sf->lockList->size != 0)
+    {
+		request *next = sf->lockList->head->data;
+		
+		if(next->type == LOCK_READ)
+			pthread_cond_signal(&sf->conds[next->clientIndex]);
+	}
+	#endif
+      
+    pthread_mutex_unlock(&sf->mutex);
     
     if(send(rq->socketDescriptor, &msgSC, sizeof(messageSC), 0) == -1)
         perror("send()");
@@ -324,13 +333,14 @@ void lockWrite(sharedFile *sf, messageCS *msgCS, server *s)
     pthread_mutex_lock(&sf->mutex);
     add(sf->lockList, rq);
     
-    #if 1
+    #if USE_SIMPLE_COND
     while(sf->isWriteLock || sf->nbReadLock > 0 || ((request *)(sf->lockList->head->data))->socketDescriptor != s->sd) 
         pthread_cond_wait(&sf->cond, &sf->mutex);
     #else
-    printf("lockWrite(): client %d avant cond\n", sf->clientIndex);
-    pthread_cond_wait(&sf->conds[sf->clientIndex], &sf->mutex);
-    printf("lockWrite(): client %d après cond\n", sf->clientIndex);
+    printf("lockWrite(): client %d avant cond\n", s->clientIndex);
+    if(sf->isWriteLock || sf->nbReadLock > 0)
+		pthread_cond_wait(&sf->conds[s->clientIndex], &sf->mutex);
+    printf("lockWrite(): client %d après cond\n", s->clientIndex);
 	#endif
 	
     rq = getHead(sf->lockList);
@@ -366,11 +376,17 @@ void unlockRead(sharedFile *sf)
     /* On debloque le fichier si aucun autre lecteur ne persiste */
     if(sf->nbReadLock == 0)
     {
-		#if 1
+		#if USE_SIMPLE_COND
 		pthread_cond_broadcast(&sf->cond);
-        #else
-        pthread_cond_signal(&sf->conds[???]);
-        #endif
+		#else
+		if(sf->lockList->size != 0)
+		{
+			request *next = sf->lockList->head->data;
+			
+			if(next->type == LOCK_WRITE)
+				pthread_cond_signal(&sf->conds[next->clientIndex]);
+		}
+		#endif
         
         printf("Lecture terminée: le fichier \"%s\" est libre\n", sf->fileName);
     }
@@ -390,11 +406,15 @@ void unlockWrite(sharedFile *sf, char *addr, long port)
     sf->lastVersionPort = port;
     pthread_mutex_unlock(&sf->mutex);
     
-    #if 1
+    #if USE_SIMPLE_COND
     pthread_cond_broadcast(&sf->cond);
     #else
-    pthread_cond_signal(&sf->conds[???]);
-    #endif
+    if(sf->lockList->size != 0)
+    {
+		request *next = sf->lockList->head->data;
+		pthread_cond_signal(&sf->conds[next->clientIndex]);
+	}
+	#endif
     
     printf("Ecriture terminée: le fichier \"%s\" est libre\n", sf->fileName);
 }
