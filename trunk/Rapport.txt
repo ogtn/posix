@@ -1,13 +1,22 @@
-
 La description de la problématique (ie. l'explication, en utilisant vos propres termes, du travail qui vous est demandé.)
+
+
 
 L'analyse du problème (cette partie doit faire ressortir en français et sans la moindre ligne de code vos choix de conceptions, 
 les problèmes que vous vous attendez à rencontrer et la manière dont vous comptez les résoudre.)
+
+Dans le but de limiter au strict necessaire les échanges client/serveur, toutes les vérifications qui peuvent être faites du côté client le sont. Des cette façon, une tentative de double lock ou encore une demande d'unlock sur un fichier non locké précedement sera detectée du côté client, et ne donnera lieu à aucune requete auprès du serveur. Ce choix est également un bon moyen de limiter le code du serveur, et de simplifier grandement la detection de ces cas particuliers. Il est en effet plus simple de verifier qu'un fichier a déjà été locké par un client dans le client lui-même (car il tient à jour un liste de fichiers qu'il a locké), que dans le serveur. Ce choix est par conséquent bénéfique sur tous les points:
+_simplification du code (et donc de sa maintenance)
+_allegement de la charge du serveur, car moins de requetes et moins de traitements
+_acceleration des detections: on s'affranchi du passage par le reseau car les detections deviennent locales
+
 
 La description de la problématique (ie. l'explication, en utilisant vos propres termes, du travail qui vous est demandé.)
 L'analyse du problème (cette partie doit faire ressortir en français et sans la moindre ligne de code vos choix de conceptions, les problèmes que vous vous attendez à rencontrer et la manière dont vous comptez les résoudre.)
 L'architecture de votre solution (la description, avec les structures de données et les variables que vous allez utiliser, avec des diagrammes pour représenter les relations entre les variables et entre les processus, du fonctionnement de chaque opération dans votre bibliothèque ; prenez soin de bien détailler les variables, leur type et leur utilité.)
 Un mini-manuel utilisateur (pour chaque opération, la spécification du comportement à attendre lorsqu'on l'appelle.)
+
+
 
 
 TODO
