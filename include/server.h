@@ -64,7 +64,7 @@ void defile(sharedFile *sf);
 
 void *mainLoop(void *data);
 
-sharedFile *getFiles(int *nbFiles);
+sharedFile *getFiles(char *fileName, int *nbFiles);
 
 int find(sharedFile *sharedFiles, int size, char *fileName);
 
