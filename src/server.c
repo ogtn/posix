@@ -10,14 +10,13 @@
 
 #include "server.h"
 
-#define USE_SIMPLE_COND		0
 
 int main(int argc, char** argv)
 {
     pthread_t tid;
     sharedFile *sharedFiles;
     pthread_attr_t attr;
-    int port = 10000;
+    int port;
     int nbFiles;
 	int sock;
     server *s;
@@ -27,6 +26,16 @@ int main(int argc, char** argv)
     int i;
     int nbClients = 0;
     pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+    if(argc != 3)
+    {
+        puts("Nombre d'arguments invalide!");
+        puts("Usage: $ server <port> <config_file>");
+
+        return EXIT_FAILURE;
+    }
+
+    port = atoi(argv[1]);
     
     for(i = 0; i < BACKLOG; i++)
 		clients[i] = UNUSED;
@@ -34,7 +43,7 @@ int main(int argc, char** argv)
     if((sock = serverInitSocket(port, BACKLOG)) == -1)
         perror("initSocket()");
     
-    sharedFiles = getFiles(&nbFiles);
+    sharedFiles = getFiles(argv[2], &nbFiles);
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
     
@@ -172,7 +181,7 @@ void deco(sharedFile *sharedFiles, server *s)
     int i;
     
     for(i = 0; i < s->nbFiles; i++)
-    {          
+    {  
         if(strcmp(sharedFiles[i].lastVersionAddr, s->clientAddr) == 0
         && sharedFiles[i].lastVersionPort == s->clientPort)
         {
@@ -203,13 +212,20 @@ int find(sharedFile *sharedFiles, int size, char *fileName)
 }
 
 
-sharedFile *getFiles(int *nbFiles)
+sharedFile *getFiles(char *fileName, int *nbFiles)
 {
     char buff[256];
     sharedFile *sharedFiles, *file;
     int i;
-    FILE *fic = fopen("files.txt", "r");
+    FILE *fic = fopen(fileName, "r");
     *nbFiles = 0;
+
+    if(fic == NULL)
+    {
+        puts("Probleme d'ouverture du fichier de config");
+        perror(fileName);
+        exit(EXIT_FAILURE);
+    }
         
     while(fgets(buff, 256, fic))
         (*nbFiles)++;
@@ -226,7 +242,7 @@ sharedFile *getFiles(int *nbFiles)
         strncpy(file->fileName, buff, FILE_SIZE);        
         file->isWriteLock = 0;	
         file->nbReadLock = 0;
-        file->lastVersionAddr[0] = '\0';
+        strcpy(file->lastVersionAddr, "nobody");
         file->lastVersionPort = 0;
         file->version = 0;
         file->lockList = newList();
@@ -266,19 +282,13 @@ void lockRead(sharedFile *sf, messageCS *msgCS, server *s)
     
     pthread_mutex_lock(&sf->mutex);
     add(sf->lockList, rq);
-    
-    #if USE_SIMPLE_COND
-    while(sf->isWriteLock || ((request *)(sf->lockList->head->data))->socketDescriptor != s->sd) 
-        pthread_cond_wait(&sf->cond, &sf->mutex);
-    #else
     printf("lockRead(): client %d avant cond\n", s->clientIndex);
+
     if(sf->isWriteLock)
 		pthread_cond_wait(&sf->conds[s->clientIndex], &sf->mutex);
-    printf("lockRead(): client %d après cond\n", s->clientIndex);
-    #endif
-    
-    rq = getHead(sf->lockList);
 
+    printf("lockRead(): client %d après cond\n", s->clientIndex);
+    rq = getHead(sf->lockList);
     printf("Demande de lock en écriture sur le fichier \"%s\"\n", sf->fileName);
     sf->nbReadLock++;
 
@@ -303,10 +313,6 @@ void lockRead(sharedFile *sf, messageCS *msgCS, server *s)
         msgSC.type = LOCKED;
     }
     
-    
-    #if USE_SIMPLE_COND
-    pthread_cond_broadcast(&sf->cond);
-    #else
     if(sf->lockList->size != 0)
     {
 		request *next = sf->lockList->head->data;
@@ -314,7 +320,6 @@ void lockRead(sharedFile *sf, messageCS *msgCS, server *s)
 		if(next->type == LOCK_READ)
 			pthread_cond_signal(&sf->conds[next->clientIndex]);
 	}
-	#endif
       
     pthread_mutex_unlock(&sf->mutex);
     
@@ -332,17 +337,12 @@ void lockWrite(sharedFile *sf, messageCS *msgCS, server *s)
     
     pthread_mutex_lock(&sf->mutex);
     add(sf->lockList, rq);
-    
-    #if USE_SIMPLE_COND
-    while(sf->isWriteLock || sf->nbReadLock > 0 || ((request *)(sf->lockList->head->data))->socketDescriptor != s->sd) 
-        pthread_cond_wait(&sf->cond, &sf->mutex);
-    #else
     printf("lockWrite(): client %d avant cond\n", s->clientIndex);
+
     if(sf->isWriteLock || sf->nbReadLock > 0)
 		pthread_cond_wait(&sf->conds[s->clientIndex], &sf->mutex);
+
     printf("lockWrite(): client %d après cond\n", s->clientIndex);
-	#endif
-	
     rq = getHead(sf->lockList);
     
     /* Verification de la version */
@@ -376,9 +376,6 @@ void unlockRead(sharedFile *sf)
     /* On debloque le fichier si aucun autre lecteur ne persiste */
     if(sf->nbReadLock == 0)
     {
-		#if USE_SIMPLE_COND
-		pthread_cond_broadcast(&sf->cond);
-		#else
 		if(sf->lockList->size != 0)
 		{
 			request *next = sf->lockList->head->data;
@@ -386,7 +383,6 @@ void unlockRead(sharedFile *sf)
 			if(next->type == LOCK_WRITE)
 				pthread_cond_signal(&sf->conds[next->clientIndex]);
 		}
-		#endif
         
         printf("Lecture terminée: le fichier \"%s\" est libre\n", sf->fileName);
     }
@@ -406,15 +402,11 @@ void unlockWrite(sharedFile *sf, char *addr, long port)
     sf->lastVersionPort = port;
     pthread_mutex_unlock(&sf->mutex);
     
-    #if USE_SIMPLE_COND
-    pthread_cond_broadcast(&sf->cond);
-    #else
     if(sf->lockList->size != 0)
     {
 		request *next = sf->lockList->head->data;
 		pthread_cond_signal(&sf->conds[next->clientIndex]);
 	}
-	#endif
     
     printf("Ecriture terminée: le fichier \"%s\" est libre\n", sf->fileName);
 }
