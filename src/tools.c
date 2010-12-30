@@ -171,11 +171,11 @@ int serverInitSocket(unsigned int port, unsigned int backlog)
  * \param type
  * 		Le type de fichier à tester : répertoire ou fichier régulier.
  * 
- * \return 1 si le fichier est du type demandé et existe, -1 sinon.
+ * \return 1 si le fichier est du type demandé et existe, 0 sinon.
  */
 int fileExist(char const * path, enum FileType type)
 {
-	int returnValue = -1;
+	int returnValue = 0;
 	
 	struct stat buff;
 	
@@ -192,4 +192,42 @@ int fileExist(char const * path, enum FileType type)
 	}
 		
 	return returnValue;
+}
+
+/**
+ * Convertit une chaine de caractères contenant un long en long.
+ * 
+ * \param str
+ * 		La chaine de caractère à convertir.
+ * 
+ * \return Le résultat de la conversion ou -1 si elle échoue.
+ */
+long strToLong(char const * str)
+{
+	char * endptr = NULL;
+	long val = -1;
+	
+	/* Pour distinguer la réussite/échec après l’appel */
+	errno = 0;
+	val = strtol(str, &endptr, 10);
+	
+	/* Vérification de certaines erreurs possibles */
+	if ((errno == ERANGE && (val == LONG_MAX || val == LONG_MIN))
+		|| (errno != 0 && val == 0)) 
+	{
+		perror("strToLong : strtol");
+		val = -1;
+	}
+	else if (endptr == str) 
+	{
+		fprintf(stderr, "strToLong : Pas de chiffre trouvé \n");
+		val = -1;
+	}
+	/* Overflow */
+	else if(val == LONG_MIN || val == LONG_MAX) 
+	{
+		perror("strToLong : Dépassement");
+	}
+	
+	return val;
 }

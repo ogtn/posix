@@ -66,4 +66,6 @@ typedef struct messageSC
     
     int fileExist(char const * path, enum FileType type);
 
+    long strToLong(char const * str);
+
 #endif

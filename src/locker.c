@@ -146,10 +146,7 @@ int lockerInit(locker *locker, char const *dirPath, char const *servAddr, unsign
                         locker->sd = clientInitSocket(server_port, servAddr);
                         if(locker->sd != -1)
                         {
-                            
-                            printf("port: %d\n", client_port);
                             int convert_client_port = htonl(client_port);
-                            printf("port: %d\n", convert_client_port);
                             
                             if(send(locker->sd, &convert_client_port, sizeof(long), 0) == -1)
                             {
@@ -335,6 +332,8 @@ enum lockError unlock(locker const *locker, char const *fileName)
             /* Envoi du type d'opération effectuée par le client */
             if(send(locker->sd, &msgCS, sizeof(messageCS), 0) != -1)
             {
+                retVal = OK;
+                
                 if(msgCS.type == UNLOCK_READ)
                 {
                     free(listRemove(locker->lockedReadFiles, fileName, (compar)strcmp));
