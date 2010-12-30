@@ -39,4 +39,4 @@ enum lockError lock(locker const *locker, char const *fileName, enum msgType typ
 
 enum lockError unlock(locker const *locker, char const *fileName);
 
-int lockerDestroy(locker const *locker);
+int lockerDestroy(locker * locker);
