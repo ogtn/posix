@@ -28,7 +28,7 @@ typedef struct localFile
 static void lockerClose(locker * locker)
 {
     if(locker != NULL)
-    {
+    {        
         if(locker->sd != -1)
         {
             shutdown(locker->sd, SHUT_RDWR);
@@ -90,89 +90,95 @@ static int findFile(void const * file, void const * name)
  * 
  * \return -1 Si la fonction échoue, 0 sinon.
  */
-int lockerInit(locker *locker, char const *dirPath, char const *servAddr, unsigned int server_port, unsigned int client_port)
+int lockerInit(locker *locker, char const *dirPath, char const *servAddr,
+                unsigned int serverPort, unsigned int clientPort)
 {
     int retVal = -1;
+    DIR * dir = NULL;
+    int convClientPort = htonl(clientPort);
+    struct dirent * entry = NULL;
     
-    if(locker != NULL && dirPath != NULL && servAddr != NULL)
+    if(locker == NULL || dirPath == NULL || servAddr == NULL)
+        goto out;
+    
+    locker->sd = -1;
+    locker->lockedReadFiles = NULL;
+    locker->lockedWriteFiles = NULL;
+    locker->files = NULL;
+    locker->path = NULL;
+    locker->servId.isValid = 0;      
+    
+    dir = opendir(dirPath);
+    if(dir == NULL)
     {
-        DIR * dir = opendir(dirPath);
+        perror("lockerInit : opendir");
+        goto out;
+    }
+    
+    locker->path = malloc(strlen(dirPath) + 1);
+    if(locker->path == NULL)
+    {
+        perror("lockerInit : malloc");
+        goto out;
+    }
         
-        locker->sd = -1;
-        locker->lockedReadFiles = NULL;
-        locker->lockedWriteFiles = NULL;
-        locker->files = NULL;
-        locker->path = NULL;
-        locker->servId.isValid = 0;      
-        
-        locker->path = malloc(strlen(dirPath) + 1);
-        if(locker->path == NULL)
+    strcpy(locker->path, dirPath);
+    
+    locker->files = newList();
+    if(locker->files == NULL)
+        goto out;
+    
+    /* Ajout des noms des fichiers partagés */
+    entry = readdir(dir);
+    while(entry != NULL)
+    {
+        if(entry->d_name[0] != '.')
         {
-            printf("PVB \n");
-        }
-        
-        strcpy(locker->path, dirPath);
-        
-        if(dir != NULL)
-        {
-            locker->files = newList();
-            if(locker->files != NULL)
+            localFile * file = malloc(sizeof(localFile));
+            if(file != NULL)
             {
-                /* Ajout des noms des fichiers partagés */
-                struct dirent * entry = readdir(dir);
-                while(entry != NULL)
-                {
-                    if(entry->d_name[0] != '.')
-                    {
-                        localFile * file = malloc(sizeof(localFile));
-                        if(file != NULL)
-                        {
-                            strncpy(file->name, entry->d_name, FILE_SIZE);
-                            file->name[FILE_SIZE-1] = '\0';
-                            file->version = 0;
-                            add(locker->files, file);
-                        }
-                    }
-                    
-                    entry = readdir(dir);
-                }
-                
-                locker->lockedReadFiles = newList();
-                if(locker->lockedReadFiles != NULL)
-                {
-                    locker->lockedWriteFiles = newList();    
-                    if(locker->lockedWriteFiles != NULL)
-                    {
-                        locker->sd = clientInitSocket(server_port, servAddr);
-                        if(locker->sd != -1)
-                        {
-                            int convert_client_port = htonl(client_port);
-                            
-                            if(send(locker->sd, &convert_client_port, sizeof(long), 0) == -1)
-                            {
-                                lockerClose(locker);
-                                retVal = -1; 
-                            }
-                            else
-                            {
-                                printf("RUN \n");
-                                locker->servId = runServer(dirPath, client_port);
-                                if(locker->servId.isValid)
-                                    retVal = 0;
-                            }
-                        }
-                    }
-                }
+                strncpy(file->name, entry->d_name, FILE_SIZE);
+                file->name[FILE_SIZE-1] = '\0';
+                file->version = 0;
+                add(locker->files, file);
             }
-            
-            closedir(dir);
+            else
+                perror("lockerInit : malloc");
         }
+        
+        entry = readdir(dir);
     }
+                
+    locker->lockedReadFiles = newList();
+    if(locker->lockedReadFiles == NULL)
+        goto out;
     
-    if(retVal == -1)
-    {
-        lockerClose(locker);
-    }
+    locker->lockedWriteFiles = newList();    
+    if(locker->lockedWriteFiles == NULL)
+        goto out;
+        
+    /* Socket client */
+    locker->sd = clientInitSocket(serverPort, servAddr);
+    if(locker->sd == -1)
+        goto out;
+    
+    if(send(locker->sd, &convClientPort, sizeof(long), 0) == -1)
+        goto out;
+    
+    /* Lancement du serveur */
+    locker->servId = runServer(dirPath, clientPort);
+    
+    if(locker->servId.isValid)
+        retVal = 0;
+    else
+        goto out;
+    
+    out : 
+        if(retVal == -1)
+            lockerClose(locker);
+            
+        if(dir != NULL)
+            closedir(dir);
     
     return retVal;
 }
@@ -237,11 +243,7 @@ enum lockError lock(locker const *locker, char const *fileName, enum msgType typ
                             }
                             
                             retVal = OK;
-                            {
-                                char type;                  /* Type du message, voir enum msgType */
-                                unsigned int port;          /* Le port du propriétaire de la derniere version du fichier */
-                                long clientAddr;
-                            
+                            {                            
                                 if(msgSC.type == UPDATE_NEEDED)
                                 {
                                     printf("Besoin d'un update depuis %s:%d\n", msgSC.addr, ntohl(msgSC.port));
@@ -306,76 +308,99 @@ enum lockError unlock(locker const *locker, char const *fileName)
 {
     messageCS msgCS;
     enum lockError retVal = -1;
-    int fileIsLocked = 1;
+    
+    if(locker == NULL || fileName == NULL)
+    {
+        retVal = BAD_PARAMETER;
+        goto out;
+    }
+    
     strncpy(msgCS.fileName, fileName, FILE_SIZE);
     msgCS.fileName[FILE_SIZE - 1] = '\0';
     msgCS.version = htonl(0);
     
-    if(locker != NULL && fileName != NULL)
+    /* Recherche du type de lockage */
+    if(listContains(locker->lockedReadFiles, fileName, (compar)strcmp))
     {
-        /* Recherche du type de lockage */
-        if(listContains(locker->lockedReadFiles, fileName, (compar)strcmp))
-        {
-            msgCS.type = UNLOCK_READ;
-        }
-        else if(listContains(locker->lockedWriteFiles, fileName, (compar)strcmp))
-        {
-            msgCS.type = UNLOCK_WRITE;
-        }
-        else
-        {
-            fileIsLocked = 0;
-        }
-        
-        if(fileIsLocked)
-        {        
-            /* Envoi du type d'opération effectuée par le client */
-            if(send(locker->sd, &msgCS, sizeof(messageCS), 0) != -1)
-            {
-                retVal = OK;
-                
-                if(msgCS.type == UNLOCK_READ)
-                {
-                    free(listRemove(locker->lockedReadFiles, fileName, (compar)strcmp));
-                }
-                else
-                {
-                    localFile *lf = listSearch(locker->files, fileName, (compar)findFile);
-                    lf->version++;     
-                    free(listRemove(locker->lockedWriteFiles, fileName, (compar)strcmp));
-                }
-            }
-            else
-            {
-                retVal = CAN_T_SEND;
-            }
-        }
-        else
-        {
-            retVal = FILE_IS_NOT_LOCKED;
-        }
+        msgCS.type = UNLOCK_READ;
+    }
+    else if(listContains(locker->lockedWriteFiles, fileName, (compar)strcmp))
+    {
+        msgCS.type = UNLOCK_WRITE;
     }
     else
     {
-        retVal = BAD_PARAMETER;
+        retVal = FILE_IS_NOT_LOCKED;
+        goto out;
     }
-
-    return retVal;
+    
+    /* Envoi du type d'opération effectuée par le client */
+    if(send(locker->sd, &msgCS, sizeof(messageCS), 0) == -1)
+    {
+        retVal = CAN_T_SEND;
+        goto out;
+    }
+        
+    retVal = OK;
+    
+    if(msgCS.type == UNLOCK_READ)
+        free(listRemove(locker->lockedReadFiles, fileName, (compar)strcmp));
+    else
+    {
+        localFile *lf = listSearch(locker->files, fileName, (compar)findFile);
+        lf->version++;     
+        free(listRemove(locker->lockedWriteFiles, fileName, (compar)strcmp));
+    }
+    
+    out:
+        return retVal;
 }
 
-int lockerDestroy(locker const *l)
+/**
+ * Détruit et libère un objet locker initialisé par l'appel à la 
+ * fonction lockerInit.
+ * 
+ * \param locker
+ *      Le locker à détruire.
+ * 
+ * \return -1 Si la fonction échoue, 0 sinon.
+ */
+int lockerDestroy(locker * locker)
 {
-    if(l != NULL)
+    messageCS msgCS;
+    node * iter = NULL;
+    
+    if(locker == NULL)
     {
-        messageCS msgCS;
-        msgCS.type = QUIT;
-
-        /* Envoi du type d'opération effectuée par le client */
-        if(send(l->sd, &msgCS, sizeof(messageCS), 0) == -1)
-            perror("destroy:send()");
-        
-        return 0;
+        return -1;    
     }
+    
+    iter = locker->lockedReadFiles->head;
+    
+    while(iter != NULL)
+    {
+        unlock(locker, ((localFile *)iter->data)->name);
+        iter = iter->next;
+    }
+    
+    iter = locker->lockedWriteFiles->head;
+    
+    while(iter != NULL)
+    {
+        unlock(locker, ((localFile *)iter->data)->name);
+        iter = iter->next;
+    }
+    
+    msgCS.type = QUIT;
 
-    return -1;
+    /* Envoi du type d'opération effectuée par le client */
+    if(send(locker->sd, &msgCS, sizeof(messageCS), 0) == -1)
+    {
+        perror("lockerDestroy: send()");
+        return -1;
+    }
+    
+    lockerClose(locker);
+    
+    return 0;   
 }
