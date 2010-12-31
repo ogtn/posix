@@ -22,7 +22,7 @@ typedef struct sharedFile
 	char fileName[FILE_SIZE];   	/* Nom du fichier concerné */ 
 	int isWriteLock;            	/* Si le fichier est bloqué en écriture */
 	int nbReadLock;             	/* Nombre de clients ayant locké le fichier en lecture */
-    long lastVersionPort;       	/* Port de du possesseur de la derniere version */
+    long lastVersionPort;       	/* Port du possesseur de la derniere version */
     char lastVersionAddr[16];   	/* Adresse ip du possesseur de la derniere version */
 	unsigned int version;       	/* Dernière version du fichier */
 	list *lockList;             	/* Liste des requetes de lock de fichiers */
@@ -54,6 +54,12 @@ typedef struct server
     int *clients;					/* Tableau des clients */
     int *nbClients;					/* Nombre de clients connectés */
     pthread_mutex_t *mutex;			/* Mutex pour proteger l'accès aux données du serveur */
+    char * dirPath;                 /* Path du répertoire du serveur 
+                                    contenant les fichiers téléchargés */
+    int serverFilePort;             /* Port du serveur de téléchargement 
+                                    de fichiers du serveur */
+    char servIpAddress[16];         /* Adresse IP du serveur de téléchargement 
+                                    de fichiers du serveur */
 } server;
 
 /*			=======================[Prototypes]=======================		  */
