@@ -368,6 +368,7 @@ enum lockError unlock(locker const *locker, char const *fileName)
 int lockerDestroy(locker * locker)
 {
     messageCS msgCS;
+    messageSC msgSC;
     node * iter = NULL;
     
     if(locker == NULL)
@@ -393,11 +394,17 @@ int lockerDestroy(locker * locker)
     
     msgCS.type = QUIT;
 
-    /* Envoi du type d'opération effectuée par le client */
+    /* Envoi du quit */
     if(send(locker->sd, &msgCS, sizeof(messageCS), 0) == -1)
     {
         perror("lockerDestroy: send()");
         return -1;
+    }
+    
+    /* Attente de la réponse du serveur */
+    if(recv(locker->sd, &msgSC, sizeof(messageSC), 0) == -1)
+    {
+        perror("lockerDestroy: recv()");
     }
     
     lockerClose(locker);

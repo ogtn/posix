@@ -231,3 +231,38 @@ long strToLong(char const * str)
 	
 	return val;
 }
+
+/**
+ * Récupère l'adresse IP de la 1er interface du PC.
+ * 
+ * \param address
+ *      L'adresse sui sera rempli par la fonction.
+ * 
+ * \return -1 si la fonction échoue, 0 sinon.
+ */
+int ipAddress(char address[16])
+{
+	char s[256];
+	struct hostent * host = NULL;
+    
+	if(address == NULL)
+		return -1;
+
+	if(gethostname(s, 256) == -1)
+	{
+		perror("ipAddress : gethostname");
+		return -1;
+	}
+
+	host = gethostbyname(s);
+	if(host == NULL)
+	{
+		perror("ipAddress : gethostbyname");
+		return -1;
+	}
+
+	strcpy(address, inet_ntoa(*(struct in_addr *)host->h_addr));
+
+	return 0;
+}
+

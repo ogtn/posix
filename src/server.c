@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <semaphore.h>
 #include <pthread.h>
+#include "file.h"
 
 #include "server.h"
 
@@ -16,7 +17,7 @@ int main(int argc, char** argv)
     pthread_t tid;
     sharedFile *sharedFiles;
     pthread_attr_t attr;
-    int port;
+    int serverPort, serverFilePort;
     int nbFiles;
 	int sock;
     server *s;
@@ -26,21 +27,39 @@ int main(int argc, char** argv)
     int i;
     int nbClients = 0;
     pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+    char * dirPath = NULL, * configFile = NULL;
+    serverId servId;
+    char servIpAddress[16];
 
-    if(argc != 3)
+    if(argc == 5)
     {
-        puts("Nombre d'arguments invalide!");
-        puts("Usage: $ server <port> <config_file>");
+        serverPort = strToLong(argv[1]);
+        configFile = argv[2];
+        serverFilePort = strToLong(argv[3]);
+        dirPath = argv[4];
+    }
 
+    if(argc != 5 || serverPort < 0 || serverFilePort < 0 || 
+        fileExist(dirPath, DIRECTORY) == 0 || 
+        dirPath[strlen(dirPath)-1] != '/' ||
+        fileExist(configFile, REGULAR_FILE) == 0)
+    {
+        fprintf(stderr, "Paramètres incorrects : ");
+        puts("Usage: $ server <port> <config_file> <ftp_port> <server_dir>");
         return EXIT_FAILURE;
     }
 
-    port = atoi(argv[1]);
-    
+    if(ipAddress(servIpAddress) == -1)
+        return EXIT_FAILURE;
+
+    servId = runServer(dirPath, serverFilePort);
+    if(!servId.isValid)
+        return EXIT_FAILURE;
+
     for(i = 0; i < BACKLOG; i++)
 		clients[i] = UNUSED;
     
-    if((sock = serverInitSocket(port, BACKLOG)) == -1)
+    if((sock = serverInitSocket(serverPort, BACKLOG)) == -1)
         perror("initSocket()");
     
     sharedFiles = getFiles(argv[2], &nbFiles);
@@ -55,6 +74,11 @@ int main(int argc, char** argv)
         s->clients = clients;
         s->nbClients = &nbClients;
         s->mutex = &mutex;
+        s->dirPath = malloc(strlen(dirPath) + 1);
+        s->serverFilePort = serverFilePort;
+
+        strcpy(s->servIpAddress, servIpAddress);
+        strcpy(s->dirPath, dirPath);
 
         if((s->sd = accept(sock, (struct sockaddr *)&ad, &sz)) != -1)
         {
@@ -179,15 +203,37 @@ void *mainLoop(void *data)
 void deco(sharedFile *sharedFiles, server *s)
 {
     int i;
+    messageSC msgSC;
     
     for(i = 0; i < s->nbFiles; i++)
     {  
         if(strcmp(sharedFiles[i].lastVersionAddr, s->clientAddr) == 0
         && sharedFiles[i].lastVersionPort == s->clientPort)
         {
-            printf("besoin de transferer %s depuis %s:%ld\n", sharedFiles[i].fileName, s->clientAddr, s->clientPort);
+            printf("besoin de transferer %s depuis %s:%ld\n", 
+                    sharedFiles[i].fileName, s->clientAddr, s->clientPort);
+            
+            if(
+                downloadFile(s->dirPath, sharedFiles[i].fileName, 
+                            s->clientPort, s->clientAddr) == -1
+            ) {
+                fprintf(stderr, "Echec du transfert de fichiers \n");
+            }
+            /* Le nouveau possesseur du fichier est le serveur */
+            else
+            {
+                sharedFiles[i].lastVersionPort = s->serverFilePort;
+                strcpy(sharedFiles[i].lastVersionAddr, s->servIpAddress);
+            }
         }
     }
+    
+    /* Les transferts sont terminés on autorise le client à quitter 
+     * l'application */
+    msgSC.type = QUIT;
+    
+    if(send(s->sd, &msgSC, sizeof(messageSC), 0) == -1)
+        perror("send()");
     
     pthread_mutex_lock(s->mutex);
     (*s->nbClients)--;
