@@ -13,15 +13,16 @@ int main(int argc, char** argv)
 	char cmd[FILE_SIZE];
     char fileName[FILE_SIZE];
     locker l;
-    char * dirPath = NULL;
+    char * dirPath = NULL, * serverAddress;
     int serverPort = -1, clientPort = -1;
     int result = 0;
     
-    if(argc == 4)
+    if(argc == 5)
     {
         dirPath = argv[1];
         serverPort = strToLong(argv[2]);
-        clientPort = strToLong(argv[3]);
+        serverAddress = argv[3];
+        clientPort = strToLong(argv[4]);
     }
     
     /* Un des paramètres passés en paramètre est incorrect */
@@ -31,13 +32,13 @@ int main(int argc, char** argv)
 	{
 		fprintf(stderr, "Paramètres incorrects : ");
 		fprintf(stderr, "$ client [path du répertoire client] ");
-		fprintf(stderr, "[port serveur] [port client] \n");
+		fprintf(stderr, "[port serveur] [adresse serveur] [port client] \n");
         
         return EXIT_FAILURE;
 	}
     
 	/* Connection au serveur */
-	if(lockerInit(&l, dirPath, "localhost", serverPort, clientPort) == -1)
+	if(lockerInit(&l, dirPath, serverAddress, serverPort, clientPort) == -1)
         return EXIT_FAILURE;
     
     while(type != QUIT)
