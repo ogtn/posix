@@ -26,7 +26,7 @@ int main(int argc, char** argv)
     }
     
     /* Un des paramètres passés en paramètre est incorrect */
-    if(argc != 4 || serverPort < 0 || clientPort < 0 || 
+    if(argc != 5 || serverPort < 0 || clientPort < 0 || 
 		fileExist(dirPath, DIRECTORY) == 0 || 
 		dirPath[strlen(dirPath)-1] != '/')
 	{
