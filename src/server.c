@@ -206,17 +206,18 @@ void deco(sharedFile *sharedFiles, server *s)
     messageSC msgSC;
     
     for(i = 0; i < s->nbFiles; i++)
-    {  
+    {
+        pthread_mutex_lock(&sharedFiles[i].mutex);
+          
         if(strcmp(sharedFiles[i].lastVersionAddr, s->clientAddr) == 0
         && sharedFiles[i].lastVersionPort == s->clientPort)
         {
             printf("besoin de transferer %s depuis %s:%ld\n", 
                     sharedFiles[i].fileName, s->clientAddr, s->clientPort);
             
-            if(
-                downloadFile(s->dirPath, sharedFiles[i].fileName, 
-                            s->clientPort, s->clientAddr) == -1
-            ) {
+            if(downloadFile(s->dirPath, sharedFiles[i].fileName, 
+                            s->clientPort, s->clientAddr) == -1)
+            {
                 fprintf(stderr, "Echec du transfert de fichiers \n");
             }
             /* Le nouveau possesseur du fichier est le serveur */
@@ -226,6 +227,8 @@ void deco(sharedFile *sharedFiles, server *s)
                 strcpy(sharedFiles[i].lastVersionAddr, s->servIpAddress);
             }
         }
+        
+        pthread_mutex_unlock(&sharedFiles[i].mutex);
     }
     
     /* Les transferts sont terminés on autorise le client à quitter 
