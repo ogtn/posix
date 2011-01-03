@@ -331,7 +331,8 @@ void lockRead(sharedFile *sf, messageCS *msgCS, server *s)
     add(sf->lockList, rq);
     printf("lockRead(): client %d avant cond\n", s->clientIndex);
 
-    if(sf->isWriteLock)
+    if(sf->isWriteLock
+    || ((request *)(sf->lockList->head->data))->socketDescriptor != s->sd)
 		pthread_cond_wait(&sf->conds[s->clientIndex], &sf->mutex);
 
     printf("lockRead(): client %d après cond\n", s->clientIndex);
@@ -386,7 +387,9 @@ void lockWrite(sharedFile *sf, messageCS *msgCS, server *s)
     add(sf->lockList, rq);
     printf("lockWrite(): client %d avant cond\n", s->clientIndex);
 
-    if(sf->isWriteLock || sf->nbReadLock > 0)
+    if(sf->isWriteLock
+    || sf->nbReadLock > 0
+    || ((request *)(sf->lockList->head->data))->socketDescriptor != s->sd)
 		pthread_cond_wait(&sf->conds[s->clientIndex], &sf->mutex);
 
     printf("lockWrite(): client %d après cond\n", s->clientIndex);
