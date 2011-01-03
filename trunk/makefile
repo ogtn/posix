@@ -24,7 +24,7 @@ $(BIN)server: $(SRC)server.c $(OBJ)list.o $(OBJ)tools.o $(OBJ)file.o $(HEADER)se
 	$(CC) $(CFLAGS) $(SRC)server.c $(OBJ)tools.o $(OBJ)list.o $(OBJ)file.o -o $(BIN)server
 
 runserver: server
-	./${BIN}server 10000 files.txt
+	./${BIN}server 10000 files.txt 10001 rep1
 
 client: $(BIN)client
 
