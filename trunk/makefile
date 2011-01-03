@@ -18,18 +18,18 @@ all:
 $(OBJ)list.o: $(SRC)list.c $(HEADER)list.h
 	$(CC) $(CFLAGS) -c $(SRC)list.c -o $(OBJ)list.o
 
-server: $(BIN)server
+shared_directory_server: $(BIN)shared_directory_server
 
-$(BIN)server: $(SRC)server.c $(OBJ)list.o $(OBJ)tools.o $(OBJ)file.o $(HEADER)server.h
-	$(CC) $(CFLAGS) $(SRC)server.c $(OBJ)tools.o $(OBJ)list.o $(OBJ)file.o -o $(BIN)server
+$(BIN)shared_directory_server: $(SRC)server.c $(OBJ)list.o $(OBJ)tools.o $(OBJ)file.o $(HEADER)server.h
+	$(CC) $(CFLAGS) $(SRC)server.c $(OBJ)tools.o $(OBJ)list.o $(OBJ)file.o -o $(BIN)shared_directory_server
 
-runserver: server
-	./${BIN}server 10000 files.txt 10001 rep1
+runserver: shared_directory_server
+	./${BIN}shared_directory_server 10000 files.txt 10001 rep1
 
-client: $(BIN)client
+shared_directory_client: $(BIN)shared_directory_client
 
-$(BIN)client: $(SRC)client.c $(OBJ)tools.o $(OBJ)file.o $(OBJ)locker.o $(OBJ)list.o $(HEADER)client.h
-	$(CC) $(CFLAGS) $(OBJ)tools.o $(OBJ)file.o $(OBJ)locker.o $(OBJ)list.o $(SRC)client.c -o $(BIN)client
+$(BIN)shared_directory_client: $(SRC)client.c $(OBJ)tools.o $(OBJ)file.o $(OBJ)locker.o $(OBJ)list.o $(HEADER)client.h
+	$(CC) $(CFLAGS) $(OBJ)tools.o $(OBJ)file.o $(OBJ)locker.o $(OBJ)list.o $(SRC)client.c -o $(BIN)shared_directory_client
 
 $(OBJ)tools.o: $(SRC)tools.c $(HEADER)tools.h
 	$(CC) $(CFLAGS) -c $(SRC)tools.c -o $(OBJ)tools.o
@@ -37,11 +37,11 @@ $(OBJ)tools.o: $(SRC)tools.c $(HEADER)tools.h
 $(OBJ)locker.o: $(SRC)locker.c $(HEADER)locker.h $(HEADER)list.h $(HEADER)tools.h
 	$(CC) $(CFLAGS) -c $(SRC)locker.c -o $(OBJ)locker.o $(OPT)
 
-runclient1: client
-	./${BIN}client rep2 10000 "localhost" 20000
+runclient1: shared_directory_client
+	./${BIN}shared_directory_client rep2 10000 "localhost" 20000
 
-runclient2: client
-	./${BIN}client rep3 10000 "localhost" 20001
+runclient2: shared_directory_client
+	./${BIN}shared_directory_client rep3 10000 "localhost" 20001
 
 $(OBJ)file.o: $(SRC)file.c $(HEADER)file.h
 	$(CC) $(CFLAGS) -c $(SRC)file.c -o $(OBJ)file.o
