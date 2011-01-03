@@ -1,10 +1,49 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include "tools.h"
 #include "client.h"
 #include "locker.h"
+
+
+void affichage(char *dirPath, char *fileName)
+{
+    char fullName[256];
+    int fd;
+    char c;
+    
+    sprintf(fullName, "%s/%s", dirPath, fileName);
+    fd = open(fullName, O_RDONLY);
+
+    printf("====Voici le contenu du fichier %s====\n", fullName);
+    
+    while(read(fd, &c, 1) == 1)
+        putchar(c);
+
+    printf("==========Fin du fichier %s===========\n", fullName);
+    
+    close(fd);
+}
+
+
+void ecriture(char *dirPath, char *fileName, int port)
+{
+    char fullName[256];
+    int fd;
+    char msg[256];
+
+    sprintf(fullName, "%s/%s", dirPath, fileName);
+    fd = open(fullName, O_WRONLY);
+    sprintf(msg, "Le client de port %d est passé par là!\n", port);
+    write(fd, msg, strlen(msg));
+    close(fd);
+}
+
 
 int main(int argc, char** argv)
 {
@@ -27,8 +66,7 @@ int main(int argc, char** argv)
     
     /* Un des paramètres passés en paramètre est incorrect */
     if(argc != 5 || serverPort < 0 || clientPort < 0 || 
-		fileExist(dirPath, DIRECTORY) == 0 || 
-		dirPath[strlen(dirPath)-1] != '/')
+		fileExist(dirPath, DIRECTORY) == 0)
 	{
 		fprintf(stderr, "Paramètres incorrects : ");
 		fprintf(stderr, "$ client [path du répertoire client] ");
@@ -69,6 +107,10 @@ int main(int argc, char** argv)
         switch(result)
         {
             case OK:
+                if(strcmp(cmd, "lockR") == 0)
+                    affichage(dirPath, fileName);
+                if(strcmp(cmd, "lockW") == 0)
+                    ecriture(dirPath, fileName, clientPort);
             break;
             case FILE_NOT_FOUND:
                 fprintf(stderr, "'%s' n'est pas présent dans le répertoire partagé.\n", fileName);

@@ -36,7 +36,6 @@ typedef struct sharedFile
 typedef struct request
 {
 	char type;                  	/* Type du message */
-	char fileName[FILE_SIZE];   	/* Nom du fichier concerné */     
 	unsigned int version;       	/* Version du fichier possédée par le client */
     int socketDescriptor;       	/* Descripteur de socket utilisé pour les communications serveur -> client */
     int clientIndex;				/* Identifiant du client */

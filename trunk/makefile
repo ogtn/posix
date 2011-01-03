@@ -37,8 +37,11 @@ $(OBJ)tools.o: $(SRC)tools.c $(HEADER)tools.h
 $(OBJ)locker.o: $(SRC)locker.c $(HEADER)locker.h $(HEADER)list.h $(HEADER)tools.h
 	$(CC) $(CFLAGS) -c $(SRC)locker.c -o $(OBJ)locker.o $(OPT)
 
-runclient: client
-	./${BIN}client
+runclient1: client
+	./${BIN}client rep2 10000 "localhost" 20000
+
+runclient2: client
+	./${BIN}client rep3 10000 "localhost" 20001
 
 $(OBJ)file.o: $(SRC)file.c $(HEADER)file.h
 	$(CC) $(CFLAGS) -c $(SRC)file.c -o $(OBJ)file.o
@@ -59,4 +62,6 @@ $(BIN)testLocker: $(TEST)testLocker.c $(OBJ)tools.o $(OBJ)file.o $(OBJ)list.o $(
 	$(CC) $(CFLAGS) $(OBJ)list.o $(OBJ)tools.o $(OBJ)file.o $(OBJ)testTools.o $(OBJ)locker.o $(TEST)testLocker.c -o $(BIN)testLocker
 
 clean:
-	rm -rf bin/* obj/*
+	rm -rf bin/* obj/* rep1/* rep2/* rep3/*
+	touch rep2/1.txt rep2/2.txt rep2/3.txt
+	touch rep3/1.txt rep3/2.txt rep3/3.txt 

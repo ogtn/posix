@@ -41,7 +41,6 @@ int main(int argc, char** argv)
 
     if(argc != 5 || serverPort < 0 || serverFilePort < 0 || 
         fileExist(dirPath, DIRECTORY) == 0 || 
-        dirPath[strlen(dirPath)-1] != '/' ||
         fileExist(configFile, REGULAR_FILE) == 0)
     {
         fprintf(stderr, "Paramètres incorrects : ");
@@ -315,7 +314,6 @@ request *initRequest(messageCS *msg, server *s)
 {
     request *rq = malloc(sizeof(request));
     rq->type = msg->type;
-    strncpy(rq->fileName, msg->fileName, FILE_SIZE);
     rq->version = msg->version;
     rq->socketDescriptor = s->sd;
     rq->clientIndex = s->clientIndex;

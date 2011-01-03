@@ -65,11 +65,11 @@ static Arg * initArg(char const * path, int sd)
 	
 	if(arg != NULL)
 	{
-		arg->dirPath = malloc(strlen(path) + 1);
+		arg->dirPath = malloc(strlen(path) + 2);
 		
 		if(arg->dirPath != NULL)
 		{
-			strcpy(arg->dirPath, path);
+            sprintf(arg->dirPath, "%s/", path);
 			arg->sd = sd;
 		}
 		else
@@ -303,7 +303,7 @@ int downloadFile(char const * path, char const * name, int port, char * servAddr
     int nbByte = 0;
     int error = 0;
 
-	if(path == NULL || name == NULL || path[strlen(path)-1] != '/')
+	if(path == NULL || name == NULL)
 	{
         fprintf(stderr, "downloadFile : Paramètre incorrect \n");
         error = 1;
@@ -311,7 +311,7 @@ int downloadFile(char const * path, char const * name, int port, char * servAddr
     }
     
     /* Création du path vers le fichier à stocker */
-    sizePath = sizeof(char) * (strlen(path) + strlen(name) + 1);
+    sizePath = sizeof(char) * (strlen(path) + strlen(name) + 2);
     pathName = malloc(sizePath);
     if(pathName == NULL)
     {
@@ -319,8 +319,8 @@ int downloadFile(char const * path, char const * name, int port, char * servAddr
         error = 1;
         goto out;
     }
-    
-    strcpy(pathName, path);
+
+    sprintf(pathName, "%s/", path);
     strcat(pathName, name);
 		
     /* Création du fichier */
@@ -413,7 +413,7 @@ serverId runServer(char const * dirPath, unsigned int port)
     int errorAttrInit = -1, error = 1, sd = -1;
     Arg * arg = NULL;
     
-    if(dirPath == NULL || dirPath[strlen(dirPath)-1] != '/' || fileExist(dirPath, DIRECTORY) != 1)
+    if(dirPath == NULL || fileExist(dirPath, DIRECTORY) != 1)
     {
         fprintf(stderr, "runServer : mauvais paramètres ");
         goto out;
